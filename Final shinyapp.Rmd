@@ -1,0 +1,126 @@
+---
+title: "Shiny"
+author: "Roy Pyo"
+date: "2023-11-08"
+output: ioslides_presentation
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r}
+library(shiny)
+library(shinydashboard)
+library(plotly)
+
+```
+
+
+```{r}
+ui <- dashboardPage(
+  dashboardHeader(title = "Player and Position Salary Comparison"),
+  dashboardSidebar(
+    sidebarMenu(
+      menuItem("Player Salary Comparison", tabName = "dashboard_player"),
+      menuItem("Position Salary Comparison", tabName = "dashboard_position")
+    )
+  ),
+  dashboardBody(
+    tabItems(
+      tabItem(
+        tabName = "dashboard_player",
+        fluidRow(
+          column(width = 6, box(
+            title = "Player Salary Comparison",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+            selectInput("selected_season", "Select Season:", choices = unique(final_comparison_value$season)),
+            selectInput("selected_player", "Select Player:", choices = unique(final_comparison_value$player)),
+            textOutput("selected_player_position"),
+            plotOutput("salary_comparison_plot")
+          ))
+        )
+      ),
+      tabItem(
+        tabName = "dashboard_position",
+        fluidRow(
+          box(
+            title = "Position Salary Comparison",
+            solidHeader = TRUE,
+            width = 12,
+            plotlyOutput("position_salary_comparison_plot")
+          )
+        )
+      )
+    )
+  )
+)
+
+# Server for the combined Shiny app
+server <- function(input, output) {
+  selected_data <- reactive({
+    final_comparison_value %>%
+      filter(season == input$selected_season, player == input$selected_player)
+  })
+  
+  selected_player_position <- reactive({
+    selected_data()$position[1]
+  })
+  
+  output$salary_comparison_plot <- renderPlot({
+    ggplot(selected_data(), aes(x = player, y = weightvalue, color = "Original Salary")) +
+      geom_point(size = 3) +  
+      geom_point(aes(y = predicted_value_lm, color = "Predicted Salary (LM)"), size = 3) +
+      geom_point(aes(y = predicted_value_rf, color = "Predicted Salary (RF)"), size = 3) +
+      geom_point(aes(y = predicted_value_xgb, color = "Predicted Salary (XGB)"), size = 3) +
+      labs(
+        title = "Player Salary Comparison",
+        x = "Player",
+        y = "Salary",
+        color = "Variable"
+      ) +
+      scale_color_manual(values = c("Original Salary" = "blue", "Predicted Salary (LM)" = "red", "Predicted Salary (RF)" = "green", "Predicted Salary (XGB)" = "purple")) +
+      theme(
+        legend.position = "top",
+        text = element_text(size = 16),  
+        plot.title = element_text(size = 15),  
+        axis.title.x = element_text(size = 10), 
+        axis.title.y = element_text(size = 10)  
+      )
+  })
+  
+  output$selected_player_position <- renderText({
+    paste("Position:", selected_player_position())
+  })
+  
+  output$position_salary_comparison_plot <- renderPlotly({
+    plot_ly(data = final_comparison_mean_value, x = ~position, y = ~mean_weightvalue, color = ~position,
+            text = ~paste("Value:", mean_weightvalue),
+            colors = "Set1") %>%
+      add_markers(marker = list(size = 3)) %>%
+      add_markers(data = final_comparison_mean_value, x = ~position, y = ~mean_predicted_value_lm, color = ~position,
+                  text = ~paste("Value (LM):", mean_predicted_value_lm),
+                  colors = "Set1") %>%
+      add_markers(data = final_comparison_mean_value, x = ~position, y = ~mean_predicted_value_rf, color = ~position,
+                  text = ~paste("Value (RF):", mean_predicted_value_rf),
+                  colors = "Set1") %>%
+      add_markers(data = final_comparison_mean_value, x = ~position, y = ~mean_predicted_value_xgb, color = ~position,
+                  text = ~paste("Value (XGB):", mean_predicted_value_xgb),
+                  colors = "Set1") %>%
+      layout(
+        title = "Scatterplot for All Positions",
+        xaxis = list(title = "Position"),
+        yaxis = list(title = "Value"),
+        showlegend = FALSE
+      )
+  })
+}
+
+# Run the combined Shiny app
+shinyApp(ui,server)
+```
+
